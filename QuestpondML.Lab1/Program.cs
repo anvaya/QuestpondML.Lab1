@@ -9,9 +9,9 @@
         /// <param name="args"></param>
         static void Main(string[] args)
         {            
-            Labs.NiftyEstimator.RunSsa();
+            //Labs.NiftyEstimator.RunSsa();
             //Labs.NiftyEstimator.RunAutoMLExperiment();            
-            //Labs.NiftyEstimator.RunSVR();
+            Labs.NiftyEstimator.RunSVR();
             //Labs.NiftyEstimator.RunReplWithFastForrest();
             
             Console.WriteLine("Press any key to exit...");

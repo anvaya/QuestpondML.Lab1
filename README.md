@@ -43,6 +43,7 @@ The project serves as a comprehensive learning resource for:
 
 ### 📊 Data Processing
 - **Lag Feature Engineering** - Creates temporal features (6 lag periods)
+- **Relative Strength Index (RSI)** - Technical indicator for momentum analysis
 - **Data Preprocessing** - Custom parsing and normalization
 - **Train/Test Splitting** - Proper temporal validation
 - **Logarithmic Transformation** - Optional scaling for exponential patterns
@@ -70,7 +71,7 @@ The project serves as a comprehensive learning resource for:
 ### 3. Support Vector Regression (SVR)
 - **Type**: Kernel-based regression
 - **Best for**: High-dimensional feature spaces
-- **Features**: Feature normalization, 6-period holdout validation
+- **Features**: 6 lag features + RSI, feature normalization, 6-period holdout validation
 
 ### 4. AutoML Experimentation
 - **Type**: Automated model discovery
@@ -205,11 +206,36 @@ Date,Price
 ...
 ```
 
+### Enhanced Feature Set
+The `HistoricalStockPrice` model includes the following features:
+- **Date**: DateTime object for temporal ordering
+- **Price**: Current price (log-transformed for modeling)
+- **LagPrice0-5**: 6 lagged price features for temporal patterns
+- **RSI**: Relative Strength Index (14-period default, configurable)
+
 ### Preprocessing Pipeline
 1. **Date Parsing**: Converts `dd-MM-yyyy` format to `DateTime`
 2. **Price Normalization**: Removes comma separators, converts to `float`
 3. **Lag Feature Creation**: Generates 6 lagged price features
-4. **Optional Log Transformation**: Applies logarithmic scaling
+4. **RSI Calculation**: Computes Relative Strength Index with configurable period (default: 6)
+5. **Optional Log Transformation**: Applies logarithmic scaling for model training
+
+### 🔧 Technical Implementation: RSI Calculator
+
+The `CalculateRSI` function implements the standard Relative Strength Index algorithm:
+
+**Algorithm Details**:
+- **Default Period**: 6 periods (configurable, optimized for monthly data)
+- **Formula**: `RSI = 100 - (100 / (1 + RS))` where `RS = Average Gain / Average Loss`
+- **Smoothing**: Uses smoothed moving average for RSI calculation
+- **Log Scale Handling**: Automatically converts from logarithmic price data
+- **Edge Cases**: Handles insufficient data gracefully (RSI = 0 for initial periods)
+
+**Features**:
+- Configurable calculation period
+- Support for log-transformed price data
+- Efficient memory usage with in-place calculations
+- Robust handling of edge cases (zero losses, insufficient data)
 
 ## 📈 Model Performance
 

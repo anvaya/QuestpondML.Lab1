@@ -32,7 +32,7 @@ namespace QuestpondML.Lab1.Labs
             PrintHeader("Fast Forest Regression", (int)trainRowCount, (int)testRowCount);            
 
             var pipeline = mlContext.Transforms
-             .Concatenate("Features", new string[] { "LagPrice0", "LagPrice1", "LagPrice2", "LagPrice3", "LagPrice4", "LagPrice5" })
+             .Concatenate("Features", new string[] { "LagPrice0", "LagPrice5", "LagPrice4", "LagPrice3", "LagPrice2", "LagPrice1"})
              .Append(mlContext.Regression.Trainers.FastForest("Price"));
 
             var trainedModel = pipeline.Fit(trainData);
@@ -46,7 +46,7 @@ namespace QuestpondML.Lab1.Labs
                 LagPrice2 = data[data.Count - 3].Price,
                 LagPrice3 = data[data.Count - 4].Price,
                 LagPrice4 = data[data.Count - 5].Price,
-                LagPrice5 = data[data.Count - 6].Price,
+                LagPrice5 = data[data.Count - 6].Price                
             });
 
             Console.WriteLine($"Predicted Price for next period: {data[data.Count - 1].Date.AddMonths(1)} {Math.Exp(result.Price)}");
@@ -96,7 +96,7 @@ namespace QuestpondML.Lab1.Labs
         {
             var experimentSettings = new RegressionExperimentSettings
             {
-                MaxExperimentTimeInSeconds = 120,
+                MaxExperimentTimeInSeconds = 30,
                 OptimizingMetric = RegressionMetric.RSquared
             };
             var experiment = mlContext.Auto().CreateRegressionExperiment(experimentSettings);
@@ -125,7 +125,7 @@ namespace QuestpondML.Lab1.Labs
 
             PrintHeader("SVR", (int)trainRowCount, (int)testRowCount);
             
-            var dataProcessPipeline = mlContext.Transforms.Concatenate("Features", new string[] { "LagPrice0", "LagPrice1", "LagPrice2", "LagPrice3", "LagPrice4", "LagPrice5" })
+            var dataProcessPipeline = mlContext.Transforms.Concatenate("Features", new string[] {  "LagPrice0", "LagPrice1", "LagPrice2", "LagPrice3", "LagPrice4", "LagPrice5", nameof(HistoricalStockPrice.rsi)  })
                                         .Append(mlContext.Transforms.NormalizeMinMax("Features", "Features"));
 
             var trainer = mlContext.Regression.Trainers.LbfgsPoissonRegression(labelColumnName: "Price");
@@ -159,7 +159,7 @@ namespace QuestpondML.Lab1.Labs
 
             var pipeline = mlContext.Forecasting.ForecastBySsa(
                 outputColumnName: "ForecastedPrice",
-                inputColumnName: "Price",  //Can experiment with LagPrice0, LagPrice1 etc. as well
+                inputColumnName:  "Price",  //Can experiment with LagPrice0, LagPrice1 etc. as well
                 windowSize: 12,
                 seriesLength: 120,
                 trainSize: trainSize,
@@ -275,9 +275,14 @@ namespace QuestpondML.Lab1.Labs
             ).Fit(dataView).Transform(dataView);
 
 
-            return mlContext.Data.CreateEnumerable<HistoricalStockPrice>(transformedDataView, reuseRowObject: false)
+            var stockData = mlContext.Data.CreateEnumerable<HistoricalStockPrice>(transformedDataView, reuseRowObject: false)
                     .OrderBy(data => data.Date)
                     .ToList();
+
+            // Calculate RSI values
+            stockData = CalculateRSI(stockData, 6);
+
+            return stockData;
         }
 
 
@@ -311,6 +316,82 @@ namespace QuestpondML.Lab1.Labs
                     }
                 }
             }
+            return data;
+        }
+
+        /// <summary>
+        /// Calculates Relative Strength Index (RSI) for stock prices
+        /// </summary>
+        /// <param name="data">List of historical stock prices sorted by date</param>
+        /// <param name="period">RSI calculation period (default is 14 days, here 2 therefore is acceptable)</param>
+        /// <returns>List of stock prices with RSI values populated</returns>
+        static List<HistoricalStockPrice> CalculateRSI(List<HistoricalStockPrice> data, int period = 2, bool convertFromLogData = true)
+        {
+            if (data == null || data.Count == 0)
+                return data;
+
+            // Calculate price changes
+            var priceChanges = new List<float>();
+            for (int i = 1; i < data.Count; i++)
+            {
+                // Convert back from log scale if needed
+                float currentPrice = convertFromLogData?(float)Math.Exp(data[i].Price): data[i].Price;
+                float previousPrice = convertFromLogData?(float)Math.Exp(data[i - 1].Price): data[i-1].Price;
+                priceChanges.Add(currentPrice - previousPrice);
+            }
+
+            // Initialize RSI array with zeros
+            var rsiValues = new float[data.Count];
+
+            if (priceChanges.Count < period)
+            {
+                // Not enough data for RSI calculation, return with RSI = 0
+                for (int i = 0; i < data.Count; i++)
+                {
+                    data[i].rsi = 0f;
+                }
+                return data;
+            }
+
+            // Calculate average gains and losses for the first RSI value
+            float sumGain = 0f;
+            float sumLoss = 0f;
+
+            for (int i = 0; i < period; i++)
+            {
+                if (priceChanges[i] > 0)
+                    sumGain += priceChanges[i];
+                else
+                    sumLoss += Math.Abs(priceChanges[i]);
+            }
+
+            float avgGain = sumGain / period;
+            float avgLoss = sumLoss / period;
+
+            // Calculate first RSI value
+            float rs = avgLoss == 0 ? 100 : avgGain / avgLoss;
+            rsiValues[period] = 100 - (100 / (1 + rs));
+
+            // Calculate subsequent RSI values using smoothed moving average
+            for (int i = period + 1; i < priceChanges.Count + 1; i++)
+            {
+                float change = priceChanges[i - 1];
+
+                // Update average gains and losses using smoothed moving average
+                avgGain = ((avgGain * (period - 1)) + (change > 0 ? change : 0)) / period;
+                avgLoss = ((avgLoss * (period - 1)) + (change < 0 ? Math.Abs(change) : 0)) / period;
+
+                // Calculate RSI
+                rs = avgLoss == 0 ? 100 : avgGain / avgLoss;
+                rsiValues[i] = 100 - (100 / (1 + rs));
+            }
+
+            // Assign RSI values to the data
+            for (int i = 0; i < data.Count; i++)
+            {
+                data[i].rsi = i < period ? 0f : rsiValues[i];
+            }
+
             return data;
         }
         #endregion

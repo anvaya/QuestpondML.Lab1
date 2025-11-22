@@ -30,6 +30,8 @@ namespace QuestpondML.Lab1.Model
         public float LagPrice3 { get; set; }
         public float LagPrice4 { get; set; }
         public float LagPrice5 { get; set; }
+
+        public float rsi { get; set; }   
     }
 
 
